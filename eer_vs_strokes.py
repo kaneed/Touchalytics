@@ -18,11 +18,12 @@ from lime import lime_tabular
 import pickle
 import datasplitter
 import machine_learning as ml
+import time
 
 ## GLOBALS ##########################
 threshold = 0.5 # Placeholder
-num_users = 41 # Number of users to analyze (max 41)
-experiment_mode = "random"
+num_users = 5 # Number of users to analyze (max 41)
+experiment_mode = "short_term"
 save_models = False
 #####################################
 
@@ -34,7 +35,7 @@ for folder in folders:
 
 def test_multiple_strokes(model, n, data_x, data_y):
     global threshold
-    cx, cy = datasplitter.groups_of_n(X_test, y_test, n)
+    cx, cy = datasplitter.splitBySlidingWindow(X_test, y_test, n)
     correct = 0
     predicted_prob = []
     predicted = []
@@ -56,20 +57,20 @@ def test_multiple_strokes(model, n, data_x, data_y):
 
 ## Read in data
 dtfInit = pd.read_csv('featMat.csv')
-dtfInit.head()
 dtfInit = dtfInit.replace(-np.inf, np.nan)
 dtfInit = dtfInit.replace(np.inf, np.nan)
 dtfInit["strokeId"] = range(len(dtfInit))
 dtfInit = dtfInit.set_index("strokeId") # Unique identifier
 
 EERs = []
+Ns = range(2,22,2)
 
-for n in range(2, 22, 2):
-    
+for n in Ns:
     # Tracked Info
     predicted_total = []
     y_test_total = []
     predicted_prob_total = []
+    tmp_eers = []
     
     for user in range(1, num_users+1):
         print("\nTraining subgroups of user " + str(user) + " (n=" + str(n) + ")")
@@ -87,12 +88,12 @@ for n in range(2, 22, 2):
 
             # Train and Test
             try:
-                model = SVC(kernel='rbf', random_state=1, probability=True)
+                model = SVC(kernel='rbf', probability=True)
                 model.fit(X_train, y_train)
                 
                 single_predicted_prob = model.predict_proba(X_test)[:,1]
-                fpr, tpr, thresholds = metrics.roc_curve(y_test, single_predicted_prob)
-                threshold, _ = ml.optimalThreshold(fpr, tpr, thresholds)
+                threshold, eer = ml.optimalThreshold(y_test, single_predicted_prob)
+                tmp_eers.append(eer)
                 
                 y_test, predicted, predicted_prob = test_multiple_strokes(model, n, X_test, y_test)
                 accuracy = metrics.accuracy_score(y_test, predicted)
@@ -100,22 +101,20 @@ for n in range(2, 22, 2):
                 y_test_total.extend(y_test.tolist())
                 predicted_total.extend(predicted.tolist())
                 predicted_prob_total.extend(predicted_prob.tolist())
-            except:
-                pass
+            except Exception as e:
+                print(e)
         
     # Reshape
     y_test_total = np.asarray(y_test_total)
     predicted_total = np.asarray(predicted_total)
     predicted_prob_total = np.asarray(predicted_prob_total)
-    fpr, tpr, thresholds = metrics.roc_curve(y_test_total, predicted_prob_total) # was test
-    _, eer = ml.optimalThreshold(fpr, tpr, thresholds)
+    eer = sum(tmp_eers) / len(tmp_eers)
     print("EER: " + str(eer))
     EERs.append(eer*100)
 
-Ns = range(2,22,2)
 plt.plot(Ns, EERs)
 plt.xlim([0, 22])
-plt.ylim([0, 100])
+plt.ylim([0, 25])
 plt.ylabel("Equal Error Rate (%)")
 plt.xlabel("Stroke Count (n)")
 plt.savefig("graphs/figure5_eer-vs-stroke-count.png", bbox_inches="tight")

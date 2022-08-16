@@ -29,12 +29,29 @@ def splitTrainAndTestData(dtf, experiment_mode):
 def splitRandomly(dtf):
     return [model_selection.train_test_split(dtf, test_size=0.3)]
 
+def splitTemporally(dtf):
+    dtf_genuine = dtf[dtf["Y"] == True]
+    dtf_ingenuine = dtf[dtf["Y"] == False]
+    dtf_10_genuine = np.array_split(dtf_genuine, 10)
+    dtf_10_ingenuine = np.array_split(dtf_ingenuine, 10)
+    
+    dtf_test_genuine = pd.DataFrame(np.concatenate(dtf_10_genuine[0:3]))
+    dtf_train_genuine = pd.DataFrame(np.concatenate(dtf_10_genuine[3:10]))
+    dtf_test_ingenuine = pd.DataFrame(np.concatenate(dtf_10_ingenuine[0:3]))
+    dtf_train_ingenuine = pd.DataFrame(np.concatenate(dtf_10_ingenuine[3:10]))
+
+    dtf_test = pd.concat([dtf_test_genuine, dtf_test_ingenuine])
+    dtf_train = pd.concat([dtf_train_genuine, dtf_train_ingenuine])
+    dtf_test.columns = dtf.columns
+    dtf_train.columns = dtf.columns
+    return [[dtf_train, dtf_test]]
+
 def splitByShortTerm(dtf):
     trainTestGroups = []
     for i in range(1,num_sessions+1):
         mask = dtf["doc_id"] == i
         data = dtf[mask]
-        trainTestGroups.append(splitRandomly(data)[0])
+        trainTestGroups.append(splitTemporally(data)[0])
     return trainTestGroups
 
 def splitByInterSession(dtf): 
@@ -86,8 +103,7 @@ def splitByInterPhone(dtf):
 def groups_of_n(data_x, data_y, n):
     groups_x = []
     groups_y = []
-    genuine_strokes = data_x[data_y] 
-    ingenuine_strokes = data_x[~data_y]
+    genuine_strokes, ingenuine_strokes = splitByGenuinity(data_x, data_y)
     
     for i in range(0,len(genuine_strokes),n):
         groups_x.append(genuine_strokes[i:i+n])
@@ -99,6 +115,23 @@ def groups_of_n(data_x, data_y, n):
     
     return groups_x, groups_y
 
+def splitBySlidingWindow(data_x, data_y, n):
+    groups_x = []
+    groups_y = []
+    genuine_strokes, ingenuine_strokes = splitByGenuinity(data_x, data_y)
+    
+    for i in range(0,len(genuine_strokes)):
+        groups_x.append(genuine_strokes[i:i+n])
+        groups_y.append(True)
+
+    for i in range(0,len(ingenuine_strokes)):
+        groups_x.append(ingenuine_strokes[i:i+n])
+        groups_y.append(False)
+    
+    return groups_x, groups_y
+
+def splitByGenuinity(data_x, data_y):
+    return data_x[data_y], data_x[~data_y] 
 
 
 

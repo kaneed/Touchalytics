@@ -40,7 +40,7 @@ def preprocess(dtf_train, dtf_test):
     dtf_test = dtf_test.dropna()
 
     # Scale to normalize features:
-    scaler = preprocessing.MinMaxScaler(feature_range=(0,1))
+    scaler = preprocessing.StandardScaler()
     # Scale training data
     X = scaler.fit_transform(dtf_train.drop("Y", axis=1))
     dtf_scaled= pd.DataFrame(X, columns=dtf_train.drop("Y", axis=1).columns, index=dtf_train.index)
@@ -63,11 +63,30 @@ def preprocess(dtf_train, dtf_test):
     return X_train, y_train, X_test, y_test
 
 
-def optimalThreshold(fpr, tpr, thresholds):
-    eer = brentq(lambda x : 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
-    optimal = interp1d(fpr, thresholds)(eer)
-    return optimal, eer
 
+def optimalThreshold(data_y, predicted_proba):
+    precision, recall, thresholds = metrics.precision_recall_curve(data_y, predicted_proba)
+    
+    # Harmonic Means
+    '''
+    harmonic_means = (2 * precision * recall) / (precision + recall)
+    index = np.nanargmax(harmonic_means)
+    '''
+    
+    # Dist
+    '''
+    dy_squared = (1-precision)**2
+    dx_squared = (1-recall)**2
+    dist = np.sqrt(dy_squared + dx_squared)
+    index = np.nanargmin(dist)
+    '''
+    
+    # Equal Precision vs Recall
+    index = np.nanargmin(np.absolute((precision - recall)))
+    
+    threshold = thresholds[index]
+    eer = 1 - len(data_y[data_y == (predicted_proba > threshold)]) / len(data_y)
+    return threshold, eer
 
 def predict_n(model, strokes, threshold):
     avg_prob = predict_n_proba(model, strokes)
@@ -93,4 +112,18 @@ def plot_roc(y_test, predicted, predicted_prob):
     plt.title("AUC=" + str(auc) + ", ACC=" + str(accuracy))
     plt.ylabel('True Positive Rate')
     plt.xlabel('False Positive Rate')
+    plt.show()
+
+def plot_prc(data_y, predicted, predicted_prob):
+    precision, recall, thresholds = metrics.precision_recall_curve(data_y, predicted_prob)
+    fig, ax = plt.subplots()
+    ax.plot(recall, precision)
+    #add axis labels to plot
+    ax.set_title('Precision-Recall Curve')
+    ax.set_ylabel('Precision')
+    ax.set_xlabel('Recall')
+    ax.set_xlim([-0.1,1.1])
+    ax.set_ylim([-0.1,1.1])
+    
+    #display plot
     plt.show()
